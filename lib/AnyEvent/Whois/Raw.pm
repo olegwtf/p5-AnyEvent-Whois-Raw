@@ -9,13 +9,13 @@ use strict;
 no warnings 'redefine';
 
 our @EXPORT_OK = qw(whois get_whois);
-our %stash;
+our $stash;
 
 sub whois {
-	local %stash = (
+	local $stash = {
 		caller => \&_whois,
 		args => [@_]
-	);
+	};
 	
 	&_whois;
 }
@@ -53,9 +53,9 @@ sub whois_query_ae {
 }
 
 sub Net::Whois::Raw::www_whois_query {
-	my $call = ++$stash{call}{www_whois_query_ae};
-	if ($call % 2 == 0) {
-		return $stash{results}{www_whois_query}[-1];
+	my $call = $stash->{call}{www_whois_query}++;
+	if ($call <= $#{$stash->{results}{www_whois_query}}) {
+		return $stash->{results}{www_whois_query}[$call];
 	}
 	
 	www_whois_query_ae(@_);
@@ -77,12 +77,14 @@ sub www_whois_query_ae_request {
 	
 	my $qurl = shift @$urls;
 	unless ($qurl) {
-		push @{$stash{results}{www_whois_query}}, undef;
-		$stash{caller}->(@{$stash{args}});
+		push @{$stash->{results}{www_whois_query}}, undef;
+		$stash->{call}{www_whois_query} = 0;
+		$stash->{caller}->(@{$stash->{args}});
 	}
 	
 	my $referer = delete $qurl->{form}{referer} if $qurl->{form} && defined $qurl->{form}{referer};
 	my $method = ( $qurl->{form} && scalar(keys %{$qurl->{form}}) ) ? 'POST' : 'GET';
+	my $stash_ref = $stash;
 	
 	my $cb = sub {
 		my ($resp, $headers) = @_;
@@ -94,20 +96,23 @@ sub www_whois_query_ae_request {
 			chomp $resp;
 			$resp =~ s/\r//g;
 			$resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
-			push @{$stash{results}{www_whois_query}}, $resp;
-			$stash{caller}->(@{$stash{args}});
+			push @{$stash_ref->{results}{www_whois_query}}, $resp;
+			local $stash = $stash_ref;
+			$stash->{call}{www_whois_query} = 0;
+			$stash->{caller}->(@{$stash->{args}});
 		}
 	};
 	
+	my $headers = {Referer => $referer};
 	if ($method eq 'POST') {
 		require URI::URL;
 		
 		my $curl = URI::URL->new("http:");
 	    $curl->query_form( %{$qurl->{form}} );
-	    http_post $qurl->{url}, $curl->equery, $cb;
+	    http_post $qurl->{url}, $curl->equery, headers => $headers, $cb;
 	}
 	else {
-		http_get $qurl->{url}, $cb;
+		http_get $qurl->{url}, headers => $headers, $cb;
 	}
 }
 
