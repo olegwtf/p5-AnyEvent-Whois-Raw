@@ -4,6 +4,7 @@ use base 'Exporter';
 use Net::Whois::Raw ();
 use AnyEvent;
 use AnyEvent::Socket;
+use AnyEvent::Handle;
 use AnyEvent::HTTP;
 use strict;
 no warnings 'redefine';
@@ -30,26 +31,73 @@ sub _whois {
 	and $cb->($res_text, $res_srv);
 }
 
-sub whois_get {
-# 	my $cb = pop;
-# 	local %stash = {};
-# 	
-# 	my ($res_text, $res_srv);
-# 	while (1) {
-# 		eval {
-# 			($res_text, $res_srv) = Net::Whois::Raw::get_whois(@_);
-# 		} and last;
-# 	}
-# 	
-# 	$cb->($res_text, $res_srv);
+sub get_whois {
+	local $stash = {
+		caller => \&_get_whois,
+		args => [@_]
+	};
+	
+	&_get_whois;
+}
+
+sub _get_whois {
+	my $cb = pop;
+	
+	my ($res_text, $res_srv);
+	eval {
+		($res_text, $res_srv) = Net::Whois::Raw::get_whois(@_);
+	}
+	and $cb->($res_text, $res_srv);
 }
 
 sub Net::Whois::Raw::whois_query {
+	my $call = $stash->{call}{whois_query}++;
+	if ($call <= $#{$stash->{results}{whois_query}}) {
+		return $stash->{results}{whois_query}[$call];
+	}
 	
+	whois_query_ae(@_);
+	die "Call me later";
 }
 
 sub whois_query_ae {
+	my ($dom, $srv, $is_ns) = @_;
 	
+	my $whoisquery = Net::Whois::Raw::Common::get_real_whois_query($dom, $srv, $is_ns);
+	my $stash_ref = $stash;
+	
+	tcp_connect $srv, 43, sub {
+		my $fh = shift;
+		unless ($fh) {
+			local $stash = $stash_ref;
+			$stash->{call}{whois_query} = 0;
+			push @{$stash->{results}{whois_query}}, undef;
+			$stash->{caller}->(@{$stash->{args}});
+			return;
+		}
+		
+		my @lines;
+		my $handle; $handle = AnyEvent::Handle->new(
+			fh => $fh,
+			on_read => sub {
+				my @l = split /(?<=\n)/, $_[0]->{rbuf};
+				if (@lines && substr($lines[-1], -1) ne "\n") {
+					$lines[-1] .= shift(@l);
+				}
+				push @lines, @l;
+				$_[0]->{rbuf} = '';
+			},
+			on_eof => sub { 
+				local $stash = $stash_ref;
+				$handle->destroy();
+				$stash->{call}{whois_query} = 0;
+				push @{$stash->{results}{whois_query}}, \@lines;
+				$stash->{caller}->(@{$stash->{args}});
+			}
+		);
+		
+		$handle->push_write($whoisquery."\015\012");
+	};
 }
 
 sub Net::Whois::Raw::www_whois_query {
@@ -80,6 +128,7 @@ sub www_whois_query_ae_request {
 		push @{$stash->{results}{www_whois_query}}, undef;
 		$stash->{call}{www_whois_query} = 0;
 		$stash->{caller}->(@{$stash->{args}});
+		return;
 	}
 	
 	my $referer = delete $qurl->{form}{referer} if $qurl->{form} && defined $qurl->{form}{referer};
@@ -94,10 +143,9 @@ sub www_whois_query_ae_request {
 		}
 		else {
 			chomp $resp;
-			$resp =~ s/\r//g;
 			$resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
-			push @{$stash_ref->{results}{www_whois_query}}, $resp;
 			local $stash = $stash_ref;
+			push @{$stash->{results}{www_whois_query}}, $resp;
 			$stash->{call}{www_whois_query} = 0;
 			$stash->{caller}->(@{$stash->{args}});
 		}
