@@ -1,7 +1,6 @@
 package AnyEvent::Whois::Raw;
 
 use base 'Exporter';
-use Net::Whois::Raw ();
 use AnyEvent;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
@@ -11,6 +10,39 @@ no warnings 'redefine';
 
 our @EXPORT_OK = qw(whois get_whois);
 our $stash;
+
+BEGIN {
+	sub require_hook {
+		my ($self, $fname) = @_;
+		
+		return if $fname ne 'Net/Whois/Raw.pm';
+		for my $i (1..$#INC) {
+			if (-e (my $tname = $INC[$i] . '/Net/Whois/Raw.pm')) {
+				open(my $fh, $tname) or next;
+				return ($fh, \&eval_filter);
+			}
+		}
+		return;
+	}
+
+	sub eval_filter {
+		return 0 if $_ eq '';
+		s/\beval\s*{/smart_eval{/;
+		return 1;
+	}
+	
+	unshift @INC, \&require_hook;
+	require Net::Whois::Raw;
+}
+
+sub Net::Whois::Raw::smart_eval(&) {
+	eval {
+		$_[0]->();
+	};
+	if ($@ && $@ =~ /^Call me later/) {
+		die $@;
+	}
+}
 
 sub whois {
 	local $stash = {
