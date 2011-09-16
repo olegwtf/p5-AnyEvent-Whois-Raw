@@ -12,6 +12,17 @@ our @EXPORT_OK = qw(whois get_whois);
 our $stash;
 
 BEGIN {
+	sub Net::Whois::Raw::smart_eval(&) {
+		my @rv = eval {
+			$_[0]->();
+		};
+		if ($@ && $@ =~ /^Call me later/) {
+			die $@;
+		}
+		
+		return @rv;
+	}
+	
 	sub require_hook {
 		my ($self, $fname) = @_;
 		
@@ -24,7 +35,7 @@ BEGIN {
 		}
 		return;
 	}
-
+	
 	sub eval_filter {
 		return 0 if $_ eq '';
 		s/\beval\s*{/smart_eval{/;
@@ -33,15 +44,6 @@ BEGIN {
 	
 	unshift @INC, \&require_hook;
 	require Net::Whois::Raw;
-}
-
-sub Net::Whois::Raw::smart_eval(&) {
-	eval {
-		$_[0]->();
-	};
-	if ($@ && $@ =~ /^Call me later/) {
-		die $@;
-	}
 }
 
 sub whois {
