@@ -121,7 +121,14 @@ sub whois_query_ae {
 				push @lines, @l;
 				$_[0]->{rbuf} = '';
 			},
-			on_eof => sub { 
+			on_error => sub {
+				local $stash = $stash_ref;
+				$handle->destroy();
+				$stash->{call}{whois_query} = 0;
+				push @{$stash->{results}{whois_query}}, undef;
+				$stash->{caller}->(@{$stash->{args}});
+			},
+			on_eof => sub {
 				local $stash = $stash_ref;
 				$handle->destroy();
 				$stash->{call}{whois_query} = 0;
@@ -199,3 +206,32 @@ sub www_whois_query_ae_request {
 }
 
 1;
+
+__END__
+
+How Net::Whois::Raw works:
+whois
+	get_whois
+		get_all_whois  __
+		|                \
+		recursive_whois   www_whois_query
+		|                 [BLOCKING]  
+		whois_query
+		[BLOCKING]        
+
+There are two blocking functions.
+
+What we do:
+First of all redefine two blocking functions to non-blocking AnyEvent equivalents.
+Now when get_all_whois will call whois_query or www_whois_query our AnyEvent
+equivalents will be started. But when AnyEvent based function called result not ready
+yet and we should interrupt get_all_whois. We do it using die("Call me later").
+_whois and _get_whois ready to receive exception, they uses eval to catch it and calls
+callback only if there was no exceptions. When result from AnyEvent based function becomes
+ready it saves result and calls _whois or _get_whois again with same arguments as before interrupt.
+So, now get_all_whois will not block because result already ready. Net::Whois::Raw::whois() or
+Net::Whois::Raw::get_whois() will return without exceptions and so, callback will be called.
+To store current state we are using localized stash.
+recursive_whois() has one problem, it catches exceptions and our die("Call me later") will not interrupt
+it. We using require hook to workaround it. We replace eval with our
+defined smart_eval, which will rethrow exception if it was our exception.
