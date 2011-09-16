@@ -46,10 +46,34 @@ BEGIN {
 	require Net::Whois::Raw;
 }
 
+sub extract_known_params {
+	my $args = shift;
+	my %known_params = (
+		timeout => 1,
+		on_prepare => 1,
+	);
+	
+	my %params;
+	eval {
+		for my $i (-2, -4) {
+			if (ref($args->[$i]) eq 'CODE' && exists($known_params{$args->[$i-1]})) {
+				$params{$args->[$i-1]} = $args->[$i];
+				delete $known_params{$args->[$i-1]};
+			}
+			else {
+				last;
+			}
+		}
+	};
+	
+	return \%params;
+}
+
 sub whois {
 	local $stash = {
 		caller => \&_whois,
-		args => [@_]
+		args => [@_],
+		params => extract_known_params(\@_)
 	};
 	
 	&_whois;
@@ -68,7 +92,8 @@ sub _whois {
 sub get_whois {
 	local $stash = {
 		caller => \&_get_whois,
-		args => [@_]
+		args => [@_],
+		params => extract_known_params(\@_)
 	};
 	
 	&_get_whois;
@@ -111,7 +136,22 @@ sub whois_query_ae {
 		}
 		
 		my @lines;
-		my $handle; $handle = AnyEvent::Handle->new(
+		my $handle;
+		my $timer = AnyEvent->timer(
+			after => exists $stash_ref->{params}{timeout} ?
+					$stash_ref->{params}{timeout} :
+					30,
+			cb => sub {
+				if ($handle && !$handle->destroyed) {
+					local $stash = $stash_ref;
+					$handle->destroy();
+					$stash->{call}{whois_query} = 0;
+					push @{$stash->{results}{whois_query}}, undef;
+					$stash->{caller}->(@{$stash->{args}});
+				}
+			}
+		);
+		$handle = AnyEvent::Handle->new(
 			fh => $fh,
 			on_read => sub {
 				my @l = split /(?<=\n)/, $_[0]->{rbuf};
@@ -122,6 +162,7 @@ sub whois_query_ae {
 				$_[0]->{rbuf} = '';
 			},
 			on_error => sub {
+				undef $timer;
 				local $stash = $stash_ref;
 				$handle->destroy();
 				$stash->{call}{whois_query} = 0;
@@ -129,6 +170,7 @@ sub whois_query_ae {
 				$stash->{caller}->(@{$stash->{args}});
 			},
 			on_eof => sub {
+				undef $timer;
 				local $stash = $stash_ref;
 				$handle->destroy();
 				$stash->{call}{whois_query} = 0;
@@ -138,6 +180,18 @@ sub whois_query_ae {
 		);
 		
 		$handle->push_write($whoisquery."\015\012");
+	},
+	sub {
+		my ($fh) = @_;
+		
+		my $timeout = 30;
+		if (exists $stash_ref->{params}{on_prepare}) {
+			$timeout = $stash_ref->{params}{on_prepare}->($fh);
+		}
+		
+		return exists $stash_ref->{params}{timeout} ?
+			$stash_ref->{params}{timeout} :
+			$timeout;
 	};
 }
 
@@ -198,10 +252,10 @@ sub www_whois_query_ae_request {
 		
 		my $curl = URI::URL->new("http:");
 	    $curl->query_form( %{$qurl->{form}} );
-	    http_post $qurl->{url}, $curl->equery, headers => $headers, $cb;
+	    http_post $qurl->{url}, $curl->equery, headers => $headers, %{$stash->{params}}, $cb;
 	}
 	else {
-		http_get $qurl->{url}, headers => $headers, $cb;
+		http_get $qurl->{url}, headers => $headers,  %{$stash->{params}}, $cb;
 	}
 }
 
