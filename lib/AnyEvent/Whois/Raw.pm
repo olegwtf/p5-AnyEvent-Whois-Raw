@@ -8,7 +8,7 @@ use AnyEvent::HTTP;
 use strict;
 no warnings 'redefine';
 
-our @EXPORT_OK = qw(whois get_whois);
+our @EXPORT = qw(whois get_whois);
 our $stash;
 
 BEGIN {
@@ -56,7 +56,7 @@ sub extract_known_params {
 	my %params;
 	eval {
 		for my $i (-2, -4) {
-			if (ref($args->[$i]) eq 'CODE' && exists($known_params{$args->[$i-1]})) {
+			if (exists($known_params{$args->[$i-1]})) {
 				$params{$args->[$i-1]} = $args->[$i];
 				delete $known_params{$args->[$i-1]};
 			}
@@ -85,8 +85,13 @@ sub _whois {
 	my ($res_text, $res_srv);
 	eval {
 		($res_text, $res_srv) = Net::Whois::Raw::whois(@_);
+	};
+	if (!$@) {
+		$cb->($res_text, $res_srv);
 	}
-	and $cb->($res_text, $res_srv);
+	elsif ($@ !~ /^Call me later/) {
+		$cb->(undef, $@);
+	}
 }
 
 sub get_whois {
@@ -105,8 +110,13 @@ sub _get_whois {
 	my ($res_text, $res_srv);
 	eval {
 		($res_text, $res_srv) = Net::Whois::Raw::get_whois(@_);
+	};
+	if (!$@) {
+		$cb->($res_text, $res_srv);
 	}
-	and $cb->($res_text, $res_srv);
+	elsif ($@ !~ /^Call me later/) {
+		$cb->(undef, $@);
+	}
 }
 
 sub Net::Whois::Raw::whois_query {
@@ -128,10 +138,7 @@ sub whois_query_ae {
 	tcp_connect $srv, 43, sub {
 		my $fh = shift;
 		unless ($fh) {
-			local $stash = $stash_ref;
-			$stash->{call}{whois_query} = 0;
-			push @{$stash->{results}{whois_query}}, undef;
-			$stash->{caller}->(@{$stash->{args}});
+			$stash_ref->{args}->[-1]->(undef, "Connection to $srv failed: $!");
 			return;
 		}
 		
@@ -143,11 +150,8 @@ sub whois_query_ae {
 					30,
 			cb => sub {
 				if ($handle && !$handle->destroyed) {
-					local $stash = $stash_ref;
 					$handle->destroy();
-					$stash->{call}{whois_query} = 0;
-					push @{$stash->{results}{whois_query}}, undef;
-					$stash->{caller}->(@{$stash->{args}});
+					$stash_ref->{args}->[-1]->(undef, "Connection to $srv timed out");
 				}
 			}
 		);
@@ -163,11 +167,8 @@ sub whois_query_ae {
 			},
 			on_error => sub {
 				undef $timer;
-				local $stash = $stash_ref;
 				$handle->destroy();
-				$stash->{call}{whois_query} = 0;
-				push @{$stash->{results}{whois_query}}, undef;
-				$stash->{caller}->(@{$stash->{args}});
+				$stash_ref->{args}->[-1]->(undef, "Read error form $srv: $!");
 			},
 			on_eof => sub {
 				undef $timer;
