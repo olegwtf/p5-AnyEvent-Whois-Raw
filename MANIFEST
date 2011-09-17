@@ -1,0 +1,8 @@
+Changes
+lib/AnyEvent/Whois/Raw.pm
+Makefile.PL
+MANIFEST			This list of files
+README
+t/1_blocking.t
+t/2_live.t
+t/whois.pl
