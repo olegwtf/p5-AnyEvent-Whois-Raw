@@ -147,7 +147,7 @@ sub whois_query_ae {
 		my $timer = AnyEvent->timer(
 			after => exists $stash_ref->{params}{timeout} ?
 					$stash_ref->{params}{timeout} :
-					30,
+					$Net::Whois::Raw::TIMEOUT||30,
 			cb => sub {
 				if ($handle && !$handle->destroyed) {
 					$handle->destroy();
@@ -185,7 +185,7 @@ sub whois_query_ae {
 	sub {
 		my ($fh) = @_;
 		
-		my $timeout = 30;
+		my $timeout = $Net::Whois::Raw::TIMEOUT||30;
 		if (exists $stash_ref->{params}{on_prepare}) {
 			$timeout = $stash_ref->{params}{on_prepare}->($fh);
 		}
@@ -290,3 +290,113 @@ To store current state we are using localized stash.
 recursive_whois() has one problem, it catches exceptions and our die("Call me later") will not interrupt
 it. We using require hook to workaround it. We replace eval with our
 defined smart_eval, which will rethrow exception if it was our exception.
+
+=pod
+
+=head1 NAME
+
+AnyEvent::Whois::Raw - Non-blocking wrapper for Net::Whois::Raw
+
+=head1 SYNOPSIS
+
+  use AnyEvent::Whois::Raw;
+  
+  whois 'google.com', timeout => 10, sub {
+      my $data = shift;
+      if (defined $data) {
+          my $srv = shift;
+          print "$data from $srv\n";
+      }
+      else {
+          my $reason = shift;
+          print "whois error: $reason";
+      }
+  };
+
+=head1 DESCRIPTION
+
+This module provides non-blocking AnyEvent compatible wrapper for Net::Whois::Raw.
+It is not trivial to make non-blocking module from blocking one without full rewrite.
+This wrapper makes such attempt. To decide how ugly or beautiful this attempt implemented
+see source code of the module.
+
+=head1 IMPORT
+
+whois() and get_whois() by default
+
+=head1 Net::Whois::Raw compatibilities and incompatibilities
+
+=over
+
+=item All global $Net::Whois::Raw::* options except @Net::Whois::Raw::SRC_IPS could be specified
+to change the behavior
+
+=item User defined functions such as *Net::Whois::Raw::whois_query_sockparams and others
+will not affect anything
+
+=item In contrast with Net::Whois::Raw whois and get_whois from this module will never die.
+On error first parameter of the callback will be undef and second will contain error reason
+
+=back
+
+=head1 FUNCTIONS
+
+=head2 whois DOMAIN [, SRV [, WHICH_WHOIS] [, %PARAMS]], CB
+
+DOMAIN, SRV and WHICH_WHOIS are same as whois arguments from Net::Whois::Raw.
+
+Available %PARAMS are:
+
+=over
+
+=item timeout => $seconds
+
+Timeout for whois request in seconds
+
+=item on_prepare => $cb
+
+Same as prepare callback from AnyEvent::Socket. So you can bind socket to some ip:
+
+  whois 'google.com', on_prepare => sub {
+      bind $_[0], AnyEvent::Socket::pack_sockaddr(0, AnyEvent::Socket::parse_ipv4($ip))); 
+  }, sub {
+      my $info = shift;
+  }
+
+=back
+
+CB is a callback which will be called when request will be finished. On success callback arguments
+are whois text data and whois server used for request. On failed undef and failed reason.
+
+=head2 get_whois DOMAIN [, SRV [, WHICH_WHOIS] [, %PARAMS]], CB
+
+Same explanation.
+
+=head1 NOTICE
+
+=over
+
+=item This module uses AnyEvent::HTTP for http queries, so you should tune $AnyEvent::HTTP::MAX_PER_HOST
+to proper value yourself.
+
+=item You should not load Net::Whois::Raw in your code if you are using this module, because this will
+cause incorrect work of the module.
+
+=back
+
+=head1 SEE ALSO
+
+L<Net::Whois::Raw>, L<AnyEvent::HTTP>, L<AnyEvent::Socket>
+
+=head1 AUTHOR
+
+Oleg G, E<lt>oleg@cpan.orgE<gt>
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2011 by Oleg G
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself
+
+=cut
