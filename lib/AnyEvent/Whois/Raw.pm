@@ -121,7 +121,7 @@ sub _get_whois {
 }
 
 sub Net::Whois::Raw::whois_query {
-	my $call = $stash->{call}{whois_query}++;
+	my $call = $stash->{calls}{whois_query}++;
 	if ($call <= $#{$stash->{results}{whois_query}}) {
 		return $stash->{results}{whois_query}[$call];
 	}
@@ -175,30 +175,40 @@ sub whois_query_ae {
 				undef $timer;
 				local $stash = $stash_ref;
 				$handle->destroy();
-				$stash->{call}{whois_query} = 0;
+				$stash->{calls}{whois_query} = 0;
 				push @{$stash->{results}{whois_query}}, \@lines;
 				$stash->{caller}->(@{$stash->{args}});
 			}
 		);
 		
 		$handle->push_write($whoisquery."\015\012");
-	},
-	sub {
-		my ($fh) = @_;
-		
-		my $timeout = $Net::Whois::Raw::TIMEOUT||30;
-		if (exists $stash_ref->{params}{on_prepare}) {
-			$timeout = $stash_ref->{params}{on_prepare}->($fh);
-		}
-		
-		return exists $stash_ref->{params}{timeout} ?
-			$stash_ref->{params}{timeout} :
-			$timeout;
-	};
+	}, sub { local $stash = $stash_ref; &_sock_prepare_cb };
+}
+
+sub _sock_prepare_cb {
+	my ($fh) = @_;
+	
+	my $sockname = getsockname($fh);
+	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
+	
+	if (exists $stash->{params}{on_prepare}) {
+		$timeout = $stash->{params}{on_prepare}->($fh);
+	}
+	
+	if (@Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
+		# we have ip and there was no bind request in on_prepare callback
+		my $ip = shift @Net::Whois::Raw::SRC_IPS;
+		bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
+		push @Net::Whois::Raw::SRC_IPS, $ip;
+	}
+	
+	return exists $stash->{params}{timeout} ?
+		$stash->{params}{timeout} :
+		$timeout;
 }
 
 sub Net::Whois::Raw::www_whois_query {
-	my $call = $stash->{call}{www_whois_query}++;
+	my $call = $stash->{calls}{www_whois_query}++;
 	if ($call <= $#{$stash->{results}{www_whois_query}}) {
 		return $stash->{results}{www_whois_query}[$call];
 	}
@@ -223,7 +233,7 @@ sub www_whois_query_ae_request {
 	my $qurl = shift @$urls;
 	unless ($qurl) {
 		push @{$stash->{results}{www_whois_query}}, undef;
-		$stash->{call}{www_whois_query} = 0;
+		$stash->{calls}{www_whois_query} = 0;
 		$stash->{caller}->(@{$stash->{args}});
 		return;
 	}
@@ -243,21 +253,27 @@ sub www_whois_query_ae_request {
 			$resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
 			local $stash = $stash_ref;
 			push @{$stash->{results}{www_whois_query}}, $resp;
-			$stash->{call}{www_whois_query} = 0;
+			$stash->{calls}{www_whois_query} = 0;
 			$stash->{caller}->(@{$stash->{args}});
 		}
 	};
 	
 	my $headers = {Referer => $referer};
+	my @params;
+	push @params, on_prepare => sub { local $stash = $stash_ref; &_sock_prepare_cb };
+	if (exists $stash->{params}{timeout}) {
+		push @params, timeout => $stash->{params}{timeout};
+	}
+	
 	if ($method eq 'POST') {
 		require URI::URL;
 		
 		my $curl = URI::URL->new("http:");
 	    $curl->query_form( %{$qurl->{form}} );
-	    http_post $qurl->{url}, $curl->equery, headers => $headers, %{$stash->{params}}, $cb;
+	    http_post $qurl->{url}, $curl->equery, headers => $headers, @params, $cb;
 	}
 	else {
-		http_get $qurl->{url}, headers => $headers,  %{$stash->{params}}, $cb;
+		http_get $qurl->{url}, headers => $headers,  @params, $cb;
 	}
 }
 
@@ -329,8 +345,7 @@ whois() and get_whois() by default
 
 =over
 
-=item All global $Net::Whois::Raw::* options except @Net::Whois::Raw::SRC_IPS could be specified
-to change the behavior
+=item All global $Net::Whois::Raw::* options could be specified to change the behavior
 
 =item User defined functions such as *Net::Whois::Raw::whois_query_sockparams and others
 will not affect anything
