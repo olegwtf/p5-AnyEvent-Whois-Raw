@@ -1,4 +1,8 @@
 Revision history for Perl extension AnyEvent::Whois::Raw.
 
+0.02  Sun Sep 18 12:27:09 2011
+	- @Net::Whois::Raw::SRC_IPS support added
+	- More correct dependencies versions
+
 0.01  Sun Sep 18 00:35:28 2011
 	- original version

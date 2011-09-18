@@ -8,7 +8,7 @@ use AnyEvent::HTTP;
 use strict;
 no warnings 'redefine';
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 our @EXPORT = qw(whois get_whois);
 our $stash;
 
