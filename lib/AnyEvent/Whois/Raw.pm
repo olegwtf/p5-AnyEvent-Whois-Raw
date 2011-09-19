@@ -8,7 +8,7 @@ use AnyEvent::HTTP;
 use strict;
 no warnings 'redefine';
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 our @EXPORT = qw(whois get_whois);
 our $stash;
 
@@ -91,7 +91,7 @@ sub _whois {
 		$cb->($res_text, $res_srv);
 	}
 	elsif ($@ !~ /^Call me later/) {
-		$cb->(undef, $@);
+		$cb->('', $@);
 	}
 }
 
@@ -116,7 +116,7 @@ sub _get_whois {
 		$cb->($res_text, $res_srv);
 	}
 	elsif ($@ !~ /^Call me later/) {
-		$cb->(undef, $@);
+		$cb->('', $@);
 	}
 }
 
@@ -139,7 +139,7 @@ sub whois_query_ae {
 	tcp_connect $srv, 43, sub {
 		my $fh = shift;
 		unless ($fh) {
-			$stash_ref->{args}->[-1]->(undef, "Connection to $srv failed: $!");
+			$stash_ref->{args}->[-1]->('', "Connection to $srv failed: $!");
 			return;
 		}
 		
@@ -152,7 +152,7 @@ sub whois_query_ae {
 			cb => sub {
 				if ($handle && !$handle->destroyed) {
 					$handle->destroy();
-					$stash_ref->{args}->[-1]->(undef, "Connection to $srv timed out");
+					$stash_ref->{args}->[-1]->('', "Connection to $srv timed out");
 				}
 			}
 		);
@@ -169,7 +169,7 @@ sub whois_query_ae {
 			on_error => sub {
 				undef $timer;
 				$handle->destroy();
-				$stash_ref->{args}->[-1]->(undef, "Read error form $srv: $!");
+				$stash_ref->{args}->[-1]->('', "Read error form $srv: $!");
 			},
 			on_eof => sub {
 				undef $timer;
@@ -318,11 +318,17 @@ AnyEvent::Whois::Raw - Non-blocking wrapper for Net::Whois::Raw
 
   use AnyEvent::Whois::Raw;
   
+  $Net::Whois::Raw::CHECK_FAIL = 1;
+  
   whois 'google.com', timeout => 10, sub {
       my $data = shift;
-      if (defined $data) {
+      if ($data) {
           my $srv = shift;
           print "$data from $srv\n";
+      }
+      elsif (! defined $data) {
+          my $srv = shift;
+          print "no information for domain on $srv found";
       }
       else {
           my $reason = shift;
@@ -351,7 +357,7 @@ whois() and get_whois() by default
 will not affect anything
 
 =item In contrast with Net::Whois::Raw whois and get_whois from this module will never die.
-On error first parameter of the callback will be undef and second will contain error reason
+On error first parameter of the callback will be false and second will contain error reason
 
 =back
 
@@ -382,7 +388,7 @@ Same as prepare callback from AnyEvent::Socket. So you can bind socket to some i
 =back
 
 CB is a callback which will be called when request will be finished. On success callback arguments
-are whois text data and whois server used for request. On failed undef and failed reason.
+are whois text data and whois server used for request. On failed false value (not undef) and failed reason.
 
 =head2 get_whois DOMAIN [, SRV [, WHICH_WHOIS] [, %PARAMS]], CB
 

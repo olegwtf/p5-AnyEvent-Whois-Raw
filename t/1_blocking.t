@@ -48,7 +48,7 @@ $cv->begin for 1..scalar(keys %rules);
 delete $rules{'mail.com'};
 whois 'mail.com', '127.0.0.1', timeout => 3, sub {
 	my ($info, $srv) = @_;
-	is($info, undef, 'mail.com timeout');
+	is($info, '', 'mail.com timeout');
 	ok(time()-$start < 10, 'mail.com timed out');
 	$cv->end;
 };

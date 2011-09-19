@@ -1,5 +1,10 @@
 Revision history for Perl extension AnyEvent::Whois::Raw.
 
+0.03  Mon Sep 19 22:29:47 2011
+	- Incompatible change: on error first callback parameter will be false instead of undef.
+	This was done to make difference between errors and situations when Net:Whois::Raw returns undef.
+	For example when $Net::Whois::Raw::CHECK_FAIL = 1 and there is no records for the domain found.
+
 0.02  Sun Sep 18 12:27:09 2011
 	- @Net::Whois::Raw::SRC_IPS support added
 	- More correct dependencies versions
