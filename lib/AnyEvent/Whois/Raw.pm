@@ -47,7 +47,7 @@ BEGIN {
 	require Net::Whois::Raw;
 }
 
-sub extract_known_params {
+sub _extract_known_params {
 	my $args = shift;
 	my %known_params = (
 		timeout => 1,
@@ -56,10 +56,11 @@ sub extract_known_params {
 	
 	my %params;
 	eval {
-		for my $i (-2, -4) {
+		for my $i (-2, -2) {
 			if (exists($known_params{$args->[$i-1]})) {
 				$params{$args->[$i-1]} = $args->[$i];
 				delete $known_params{$args->[$i-1]};
+				splice @$args, $i-1, 2;
 			}
 			else {
 				last;
@@ -73,8 +74,8 @@ sub extract_known_params {
 sub whois {
 	local $stash = {
 		caller => \&_whois,
+		params => _extract_known_params(\@_),
 		args => [@_],
-		params => extract_known_params(\@_)
 	};
 	
 	&_whois;
@@ -98,8 +99,8 @@ sub _whois {
 sub get_whois {
 	local $stash = {
 		caller => \&_get_whois,
+		params => _extract_known_params(\@_),
 		args => [@_],
-		params => extract_known_params(\@_)
 	};
 	
 	&_get_whois;
