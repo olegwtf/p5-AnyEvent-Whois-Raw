@@ -138,7 +138,7 @@ sub whois_query_ae {
 	my $whoisquery = Net::Whois::Raw::Common::get_real_whois_query($dom, $srv_and_port, $is_ns);
 	my $stash_ref = $stash;
 
-    my ( $srv, $port ) = split /:/, $srv_and_port;
+	my ($srv, $port) = split /:/, $srv_and_port;
 	
 	tcp_connect $srv, $port || 43, sub {
 		my $fh = shift;
@@ -273,8 +273,8 @@ sub www_whois_query_ae_request {
 		require URI::URL;
 		
 		my $curl = URI::URL->new("http:");
-	    $curl->query_form( %{$qurl->{form}} );
-	    http_post $qurl->{url}, $curl->equery, headers => $headers, @params, $cb;
+		$curl->query_form( %{$qurl->{form}} );
+		http_post $qurl->{url}, $curl->equery, headers => $headers, @params, $cb;
 	}
 	else {
 		http_get $qurl->{url}, headers => $headers,  @params, $cb;
