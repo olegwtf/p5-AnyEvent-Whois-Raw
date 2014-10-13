@@ -8,9 +8,11 @@ use AnyEvent::HTTP;
 use strict;
 no warnings 'redefine';
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 our @EXPORT = qw(whois get_whois);
 our $stash;
+
+our $TLD_IP_POOL = {};
 
 BEGIN {
 	sub Net::Whois::Raw::smart_eval(&) {
@@ -186,20 +188,33 @@ sub whois_query_ae {
 		);
 		
 		$handle->push_write($whoisquery."\015\012");
-	}, sub { local $stash = $stash_ref; &_sock_prepare_cb };
+	}, sub {
+        my $fh = shift;
+        local $stash = $stash_ref;
+        _sock_prepare_cb($fh, $dom);
+    };
 }
 
 sub _sock_prepare_cb {
-	my ($fh) = @_;
+	my ($fh, $domain) = @_;
 	
+    my @splitted = Net::Whois::Raw::Common::split_domain($domain);
+    my $tld = pop @splitted;
+    $tld = uc $tld;
 	my $sockname = getsockname($fh);
 	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
 	
 	if (exists $stash->{params}{on_prepare}) {
 		$timeout = $stash->{params}{on_prepare}->($fh);
 	}
-	
-	if (@Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
+
+	if (%$TLD_IP_POOL && $TLD_IP_POOL->{$tld}) {
+        # for enterprise usage sometimes whois requests are unlimited from specified ip
+        my $ip = shift @{$TLD_IP_POOL->{$tld}};
+		bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
+		push @{$TLD_IP_POOL->{$tld}}, $ip;
+    }
+	elsif (@Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
 		# we have ip and there was no bind request in on_prepare callback
 		my $ip = shift @Net::Whois::Raw::SRC_IPS;
 		bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
