@@ -199,29 +199,24 @@ sub _sock_prepare_cb {
 	my $sockname = getsockname($fh);
 	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
 	
-	my $server4query = Net::Whois::Raw::Common::get_server($domain);
-	my $rotate_reference = undef;
-
-	eval {
-		$rotate_reference = Net::Whois::Raw::get_ips_for_query($server4query);
-	};
-
 	if (exists $stash->{params}{on_prepare}) {
 		$timeout = $stash->{params}{on_prepare}->($fh);
 	}
-
+	
+	my $server4query = Net::Whois::Raw::Common::get_server($domain);
+	my $rotate_reference = eval { Net::Whois::Raw::get_ips_for_query($server4query) };
+	
 	if (!$rotate_reference && @Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
 		# we have ip and there was no bind request in on_prepare callback
 		$rotate_reference = \@Net::Whois::Raw::SRC_IPS;
 	}
 	
-
 	if ($rotate_reference) {
-		my $ip = $rotate_reference->[0];
+		my $ip = shift @$rotate_reference;
 		bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
-		push @$rotate_reference, shift @$rotate_reference; # rotate ips
+		push @$rotate_reference, $ip; # rotate ips
 	}
-
+	
 	return exists $stash->{params}{timeout} ?
 		$stash->{params}{timeout} :
 		$timeout;
@@ -341,19 +336,19 @@ AnyEvent::Whois::Raw - Non-blocking wrapper for Net::Whois::Raw
   $Net::Whois::Raw::CHECK_FAIL = 1;
   
   whois 'google.com', timeout => 10, sub {
-	  my $data = shift;
-	  if ($data) {
-		  my $srv = shift;
-		  print "$data from $srv\n";
-	  }
-	  elsif (! defined $data) {
-		  my $srv = shift;
-		  print "no information for domain on $srv found";
-	  }
-	  else {
-		  my $reason = shift;
-		  print "whois error: $reason";
-	  }
+    my $data = shift;
+    if ($data) {
+      my $srv = shift;
+      print "$data from $srv\n";
+    }
+    elsif (! defined $data) {
+      my $srv = shift;
+      print "no information for domain on $srv found";
+    }
+    else {
+      my $reason = shift;
+      print "whois error: $reason";
+    }
   };
 
 =head1 DESCRIPTION
@@ -400,9 +395,9 @@ Timeout for whois request in seconds
 Same as prepare callback from AnyEvent::Socket. So you can bind socket to some ip:
 
   whois 'google.com', on_prepare => sub {
-	  bind $_[0], AnyEvent::Socket::pack_sockaddr(0, AnyEvent::Socket::parse_ipv4($ip))); 
+    bind $_[0], AnyEvent::Socket::pack_sockaddr(0, AnyEvent::Socket::parse_ipv4($ip))); 
   }, sub {
-	  my $info = shift;
+    my $info = shift;
   }
 
 =back
