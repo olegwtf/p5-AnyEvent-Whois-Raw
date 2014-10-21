@@ -13,288 +13,288 @@ our @EXPORT = qw(whois get_whois);
 our $stash;
 
 BEGIN {
-    sub Net::Whois::Raw::smart_eval(&) {
-        my @rv = eval {
-            $_[0]->();
-        };
-        if ($@ && $@ =~ /^Call me later/) {
-            die $@;
-        }
-        
-        return @rv;
-    }
-    
-    sub require_hook {
-        my ($self, $fname) = @_;
-        
-        return if $fname ne 'Net/Whois/Raw.pm';
-        for my $i (1..$#INC) {
-            if (-e (my $tname = $INC[$i] . '/Net/Whois/Raw.pm')) {
-                open(my $fh, $tname) or next;
-                return ($fh, \&eval_filter);
-            }
-        }
-        return;
-    }
-    
-    sub eval_filter {
-        return 0 if $_ eq '';
-        s/\beval\s*{/smart_eval{/;
-        return 1;
-    }
-    
-    unshift @INC, \&require_hook;
-    require Net::Whois::Raw;
+	sub Net::Whois::Raw::smart_eval(&) {
+		my @rv = eval {
+			$_[0]->();
+		};
+		if ($@ && $@ =~ /^Call me later/) {
+			die $@;
+		}
+		
+		return @rv;
+	}
+	
+	sub require_hook {
+		my ($self, $fname) = @_;
+		
+		return if $fname ne 'Net/Whois/Raw.pm';
+		for my $i (1..$#INC) {
+			if (-e (my $tname = $INC[$i] . '/Net/Whois/Raw.pm')) {
+				open(my $fh, $tname) or next;
+				return ($fh, \&eval_filter);
+			}
+		}
+		return;
+	}
+	
+	sub eval_filter {
+		return 0 if $_ eq '';
+		s/\beval\s*{/smart_eval{/;
+		return 1;
+	}
+	
+	unshift @INC, \&require_hook;
+	require Net::Whois::Raw;
 }
 
 sub _extract_known_params {
-    my $args = shift;
-    my %known_params = (
-        timeout => 1,
-        on_prepare => 1,
-    );
-    
-    my %params;
-    eval {
-        for my $i (-2, -2) {
-            if (exists($known_params{$args->[$i-1]})) {
-                $params{$args->[$i-1]} = $args->[$i];
-                delete $known_params{$args->[$i-1]};
-                splice @$args, $i-1, 2;
-            }
-            else {
-                last;
-            }
-        }
-    };
-    
-    return \%params;
+	my $args = shift;
+	my %known_params = (
+		timeout => 1,
+		on_prepare => 1,
+	);
+	
+	my %params;
+	eval {
+		for my $i (-2, -2) {
+			if (exists($known_params{$args->[$i-1]})) {
+				$params{$args->[$i-1]} = $args->[$i];
+				delete $known_params{$args->[$i-1]};
+				splice @$args, $i-1, 2;
+			}
+			else {
+				last;
+			}
+		}
+	};
+	
+	return \%params;
 }
 
 sub whois {
-    local $stash = {
-        caller => \&_whois,
-        params => _extract_known_params(\@_),
-        args => [@_],
-    };
-    
-    &_whois;
+	local $stash = {
+		caller => \&_whois,
+		params => _extract_known_params(\@_),
+		args => [@_],
+	};
+	
+	&_whois;
 }
 
 sub _whois {
-    my $cb = pop;
-    
-    my ($res_text, $res_srv);
-    eval {
-        ($res_text, $res_srv) = Net::Whois::Raw::whois(@_);
-    };
-    if (!$@) {
-        $cb->($res_text, $res_srv);
-    }
-    elsif ($@ !~ /^Call me later/) {
-        $cb->('', $@);
-    }
+	my $cb = pop;
+	
+	my ($res_text, $res_srv);
+	eval {
+		($res_text, $res_srv) = Net::Whois::Raw::whois(@_);
+	};
+	if (!$@) {
+		$cb->($res_text, $res_srv);
+	}
+	elsif ($@ !~ /^Call me later/) {
+		$cb->('', $@);
+	}
 }
 
 sub get_whois {
-    local $stash = {
-        caller => \&_get_whois,
-        params => _extract_known_params(\@_),
-        args => [@_],
-    };
-    
-    &_get_whois;
+	local $stash = {
+		caller => \&_get_whois,
+		params => _extract_known_params(\@_),
+		args => [@_],
+	};
+	
+	&_get_whois;
 }
 
 sub _get_whois {
-    my $cb = pop;
-    
-    my ($res_text, $res_srv);
-    eval {
-        ($res_text, $res_srv) = Net::Whois::Raw::get_whois(@_);
-    };
-    if (!$@) {
-        $cb->($res_text, $res_srv);
-    }
-    elsif ($@ !~ /^Call me later/) {
-        $cb->('', $@);
-    }
+	my $cb = pop;
+	
+	my ($res_text, $res_srv);
+	eval {
+		($res_text, $res_srv) = Net::Whois::Raw::get_whois(@_);
+	};
+	if (!$@) {
+		$cb->($res_text, $res_srv);
+	}
+	elsif ($@ !~ /^Call me later/) {
+		$cb->('', $@);
+	}
 }
 
 sub Net::Whois::Raw::whois_query {
-    my $call = $stash->{calls}{whois_query}++;
-    if ($call <= $#{$stash->{results}{whois_query}}) {
-        return $stash->{results}{whois_query}[$call];
-    }
-    
-    whois_query_ae(@_);
-    die "Call me later";
+	my $call = $stash->{calls}{whois_query}++;
+	if ($call <= $#{$stash->{results}{whois_query}}) {
+		return $stash->{results}{whois_query}[$call];
+	}
+	
+	whois_query_ae(@_);
+	die "Call me later";
 }
 
 sub whois_query_ae {
-    my ($dom, $srv_and_port, $is_ns) = @_;
+	my ($dom, $srv_and_port, $is_ns) = @_;
 
-    
-    my $whoisquery = Net::Whois::Raw::Common::get_real_whois_query($dom, $srv_and_port, $is_ns);
-    my $stash_ref = $stash;
+	
+	my $whoisquery = Net::Whois::Raw::Common::get_real_whois_query($dom, $srv_and_port, $is_ns);
+	my $stash_ref = $stash;
 
-    my ($srv, $port) = split /:/, $srv_and_port;
-    
-    tcp_connect $srv, $port || 43, sub {
-        my $fh = shift;
-        unless ($fh) {
-            $stash_ref->{args}->[-1]->('', "Connection to $srv failed: $!");
-            return;
-        }
-        
-        my @lines;
-        my $handle;
-        my $timer = AnyEvent->timer(
-            after => exists $stash_ref->{params}{timeout} ?
-                    $stash_ref->{params}{timeout} :
-                    $Net::Whois::Raw::TIMEOUT||30,
-            cb => sub {
-                if ($handle && !$handle->destroyed) {
-                    $handle->destroy();
-                    $stash_ref->{args}->[-1]->('', "Connection to $srv timed out");
-                }
-            }
-        );
-        $handle = AnyEvent::Handle->new(
-            fh => $fh,
-            on_read => sub {
-                my @l = split /(?<=\n)/, $_[0]->{rbuf};
-                if (@lines && substr($lines[-1], -1) ne "\n") {
-                    $lines[-1] .= shift(@l);
-                }
-                push @lines, @l;
-                $_[0]->{rbuf} = '';
-            },
-            on_error => sub {
-                undef $timer;
-                $handle->destroy();
-                $stash_ref->{args}->[-1]->('', "Read error form $srv: $!");
-            },
-            on_eof => sub {
-                undef $timer;
-                local $stash = $stash_ref;
-                $handle->destroy();
-                $stash->{calls}{whois_query} = 0;
-                push @{$stash->{results}{whois_query}}, \@lines;
-                $stash->{caller}->(@{$stash->{args}});
-            }
-        );
-        
-        $handle->push_write($whoisquery."\015\012");
-    }, sub {
-        my $fh = shift;
-        local $stash = $stash_ref;
-        _sock_prepare_cb($fh, $dom);
-    };
+	my ($srv, $port) = split /:/, $srv_and_port;
+	
+	tcp_connect $srv, $port || 43, sub {
+		my $fh = shift;
+		unless ($fh) {
+			$stash_ref->{args}->[-1]->('', "Connection to $srv failed: $!");
+			return;
+		}
+		
+		my @lines;
+		my $handle;
+		my $timer = AnyEvent->timer(
+			after => exists $stash_ref->{params}{timeout} ?
+					$stash_ref->{params}{timeout} :
+					$Net::Whois::Raw::TIMEOUT||30,
+			cb => sub {
+				if ($handle && !$handle->destroyed) {
+					$handle->destroy();
+					$stash_ref->{args}->[-1]->('', "Connection to $srv timed out");
+				}
+			}
+		);
+		$handle = AnyEvent::Handle->new(
+			fh => $fh,
+			on_read => sub {
+				my @l = split /(?<=\n)/, $_[0]->{rbuf};
+				if (@lines && substr($lines[-1], -1) ne "\n") {
+					$lines[-1] .= shift(@l);
+				}
+				push @lines, @l;
+				$_[0]->{rbuf} = '';
+			},
+			on_error => sub {
+				undef $timer;
+				$handle->destroy();
+				$stash_ref->{args}->[-1]->('', "Read error form $srv: $!");
+			},
+			on_eof => sub {
+				undef $timer;
+				local $stash = $stash_ref;
+				$handle->destroy();
+				$stash->{calls}{whois_query} = 0;
+				push @{$stash->{results}{whois_query}}, \@lines;
+				$stash->{caller}->(@{$stash->{args}});
+			}
+		);
+		
+		$handle->push_write($whoisquery."\015\012");
+	}, sub {
+		my $fh = shift;
+		local $stash = $stash_ref;
+		_sock_prepare_cb($fh, $dom);
+	};
 }
 
 sub _sock_prepare_cb {
-    my ($fh, $domain) = @_;
-    
-    my $sockname = getsockname($fh);
-    my $timeout = $Net::Whois::Raw::TIMEOUT||30;
-    
-    my $server4query = Net::Whois::Raw::Common::get_server($domain);
-    my $rotate_reference = undef;
+	my ($fh, $domain) = @_;
+	
+	my $sockname = getsockname($fh);
+	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
+	
+	my $server4query = Net::Whois::Raw::Common::get_server($domain);
+	my $rotate_reference = undef;
 
-    eval {
-        $rotate_reference = Net::Whois::Raw::get_ips_for_query($server4query);
-    };
+	eval {
+		$rotate_reference = Net::Whois::Raw::get_ips_for_query($server4query);
+	};
 
-    if (exists $stash->{params}{on_prepare}) {
-        $timeout = $stash->{params}{on_prepare}->($fh);
-    }
+	if (exists $stash->{params}{on_prepare}) {
+		$timeout = $stash->{params}{on_prepare}->($fh);
+	}
 
-    if (!$rotate_reference && @Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
-        # we have ip and there was no bind request in on_prepare callback
-        $rotate_reference = \@Net::Whois::Raw::SRC_IPS;
-    }
-    
+	if (!$rotate_reference && @Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
+		# we have ip and there was no bind request in on_prepare callback
+		$rotate_reference = \@Net::Whois::Raw::SRC_IPS;
+	}
+	
 
-    if ($rotate_reference) {
-        my $ip = $rotate_reference->[0];
-        bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
-        push @$rotate_reference, shift @$rotate_reference; # rotate ips
-    }
+	if ($rotate_reference) {
+		my $ip = $rotate_reference->[0];
+		bind $fh, AnyEvent::Socket::pack_sockaddr(0, parse_address($ip));
+		push @$rotate_reference, shift @$rotate_reference; # rotate ips
+	}
 
-    return exists $stash->{params}{timeout} ?
-        $stash->{params}{timeout} :
-        $timeout;
+	return exists $stash->{params}{timeout} ?
+		$stash->{params}{timeout} :
+		$timeout;
 }
 
 sub Net::Whois::Raw::www_whois_query {
-    my $call = $stash->{calls}{www_whois_query}++;
-    if ($call <= $#{$stash->{results}{www_whois_query}}) {
-        return $stash->{results}{www_whois_query}[$call];
-    }
-    
-    www_whois_query_ae(@_);
-    die "Call me later";
+	my $call = $stash->{calls}{www_whois_query}++;
+	if ($call <= $#{$stash->{results}{www_whois_query}}) {
+		return $stash->{results}{www_whois_query}[$call];
+	}
+	
+	www_whois_query_ae(@_);
+	die "Call me later";
 }
 
 sub www_whois_query_ae {
-    my ($dom) = (lc shift);
-    
-    my ($resp, $url);
-    my ($name, $tld) = Net::Whois::Raw::Common::split_domain( $dom );
-    my @http_query_urls = @{Net::Whois::Raw::Common::get_http_query_url($dom)};
-    
-    www_whois_query_ae_request(\@http_query_urls, $tld);
+	my ($dom) = (lc shift);
+	
+	my ($resp, $url);
+	my ($name, $tld) = Net::Whois::Raw::Common::split_domain( $dom );
+	my @http_query_urls = @{Net::Whois::Raw::Common::get_http_query_url($dom)};
+	
+	www_whois_query_ae_request(\@http_query_urls, $tld);
 }
 
 sub www_whois_query_ae_request {
-    my ($urls, $tld) = @_;
-    
-    my $qurl = shift @$urls;
-    unless ($qurl) {
-        push @{$stash->{results}{www_whois_query}}, undef;
-        $stash->{calls}{www_whois_query} = 0;
-        $stash->{caller}->(@{$stash->{args}});
-        return;
-    }
-    
-    my $referer = delete $qurl->{form}{referer} if $qurl->{form} && defined $qurl->{form}{referer};
-    my $method = ( $qurl->{form} && scalar(keys %{$qurl->{form}}) ) ? 'POST' : 'GET';
-    my $stash_ref = $stash;
-    
-    my $cb = sub {
-        my ($resp, $headers) = @_;
-        
-        if (!$resp || $headers->{Status} > 299) {
-            www_whois_query_ae_request($urls, $tld);
-        }
-        else {
-            chomp $resp;
-            $resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
-            local $stash = $stash_ref;
-            push @{$stash->{results}{www_whois_query}}, $resp;
-            $stash->{calls}{www_whois_query} = 0;
-            $stash->{caller}->(@{$stash->{args}});
-        }
-    };
-    
-    my $headers = {Referer => $referer};
-    my @params;
-    push @params, on_prepare => sub { local $stash = $stash_ref; &_sock_prepare_cb };
-    if (exists $stash->{params}{timeout}) {
-        push @params, timeout => $stash->{params}{timeout};
-    }
-    
-    if ($method eq 'POST') {
-        require URI::URL;
-        
-        my $curl = URI::URL->new("http:");
-        $curl->query_form( %{$qurl->{form}} );
-        http_post $qurl->{url}, $curl->equery, headers => $headers, @params, $cb;
-    }
-    else {
-        http_get $qurl->{url}, headers => $headers,  @params, $cb;
-    }
+	my ($urls, $tld) = @_;
+	
+	my $qurl = shift @$urls;
+	unless ($qurl) {
+		push @{$stash->{results}{www_whois_query}}, undef;
+		$stash->{calls}{www_whois_query} = 0;
+		$stash->{caller}->(@{$stash->{args}});
+		return;
+	}
+	
+	my $referer = delete $qurl->{form}{referer} if $qurl->{form} && defined $qurl->{form}{referer};
+	my $method = ( $qurl->{form} && scalar(keys %{$qurl->{form}}) ) ? 'POST' : 'GET';
+	my $stash_ref = $stash;
+	
+	my $cb = sub {
+		my ($resp, $headers) = @_;
+		
+		if (!$resp || $headers->{Status} > 299) {
+			www_whois_query_ae_request($urls, $tld);
+		}
+		else {
+			chomp $resp;
+			$resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
+			local $stash = $stash_ref;
+			push @{$stash->{results}{www_whois_query}}, $resp;
+			$stash->{calls}{www_whois_query} = 0;
+			$stash->{caller}->(@{$stash->{args}});
+		}
+	};
+	
+	my $headers = {Referer => $referer};
+	my @params;
+	push @params, on_prepare => sub { local $stash = $stash_ref; &_sock_prepare_cb };
+	if (exists $stash->{params}{timeout}) {
+		push @params, timeout => $stash->{params}{timeout};
+	}
+	
+	if ($method eq 'POST') {
+		require URI::URL;
+		
+		my $curl = URI::URL->new("http:");
+		$curl->query_form( %{$qurl->{form}} );
+		http_post $qurl->{url}, $curl->equery, headers => $headers, @params, $cb;
+	}
+	else {
+		http_get $qurl->{url}, headers => $headers,  @params, $cb;
+	}
 }
 
 1;
@@ -303,13 +303,13 @@ __END__
 
 How Net::Whois::Raw works:
 whois
-    get_whois
-        get_all_whois  __
-        |                \
-        recursive_whois   www_whois_query
-        |                 [BLOCKING]  
-        whois_query
-        [BLOCKING]        
+	get_whois
+		get_all_whois  __
+		|                \
+		recursive_whois   www_whois_query
+		|                 [BLOCKING]  
+		whois_query
+		[BLOCKING]        
 
 There are two blocking functions.
 
@@ -341,19 +341,19 @@ AnyEvent::Whois::Raw - Non-blocking wrapper for Net::Whois::Raw
   $Net::Whois::Raw::CHECK_FAIL = 1;
   
   whois 'google.com', timeout => 10, sub {
-      my $data = shift;
-      if ($data) {
-          my $srv = shift;
-          print "$data from $srv\n";
-      }
-      elsif (! defined $data) {
-          my $srv = shift;
-          print "no information for domain on $srv found";
-      }
-      else {
-          my $reason = shift;
-          print "whois error: $reason";
-      }
+	  my $data = shift;
+	  if ($data) {
+		  my $srv = shift;
+		  print "$data from $srv\n";
+	  }
+	  elsif (! defined $data) {
+		  my $srv = shift;
+		  print "no information for domain on $srv found";
+	  }
+	  else {
+		  my $reason = shift;
+		  print "whois error: $reason";
+	  }
   };
 
 =head1 DESCRIPTION
@@ -400,9 +400,9 @@ Timeout for whois request in seconds
 Same as prepare callback from AnyEvent::Socket. So you can bind socket to some ip:
 
   whois 'google.com', on_prepare => sub {
-      bind $_[0], AnyEvent::Socket::pack_sockaddr(0, AnyEvent::Socket::parse_ipv4($ip))); 
+	  bind $_[0], AnyEvent::Socket::pack_sockaddr(0, AnyEvent::Socket::parse_ipv4($ip))); 
   }, sub {
-      my $info = shift;
+	  my $info = shift;
   }
 
 =back
