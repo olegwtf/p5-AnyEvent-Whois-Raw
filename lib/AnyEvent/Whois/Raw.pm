@@ -194,7 +194,7 @@ sub whois_query_ae {
 }
 
 sub _sock_prepare_cb {
-	my ($fh, $domain) = @_;
+	my ($fh, $dom) = @_;
 	
 	my $sockname = getsockname($fh);
 	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
@@ -203,7 +203,7 @@ sub _sock_prepare_cb {
 		$timeout = $stash->{params}{on_prepare}->($fh);
 	}
 	
-	my $server4query = Net::Whois::Raw::Common::get_server($domain);
+	my $server4query = Net::Whois::Raw::Common::get_server($dom);
 	my $rotate_reference = eval { Net::Whois::Raw::get_ips_for_query($server4query) };
 	
 	if (!$rotate_reference && @Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
@@ -239,11 +239,11 @@ sub www_whois_query_ae {
 	my ($name, $tld) = Net::Whois::Raw::Common::split_domain( $dom );
 	my @http_query_urls = @{Net::Whois::Raw::Common::get_http_query_url($dom)};
 	
-	www_whois_query_ae_request(\@http_query_urls, $tld);
+	www_whois_query_ae_request(\@http_query_urls, $tld, $dom);
 }
 
 sub www_whois_query_ae_request {
-	my ($urls, $tld) = @_;
+	my ($urls, $tld, $dom) = @_;
 	
 	my $qurl = shift @$urls;
 	unless ($qurl) {
@@ -259,14 +259,14 @@ sub www_whois_query_ae_request {
 	
 	my $cb = sub {
 		my ($resp, $headers) = @_;
+		local $stash = $stash_ref;
 		
 		if (!$resp || $headers->{Status} > 299) {
-			www_whois_query_ae_request($urls, $tld);
+			www_whois_query_ae_request($urls, $tld, $dom);
 		}
 		else {
 			chomp $resp;
 			$resp = Net::Whois::Raw::Common::parse_www_content($resp, $tld, $qurl->{url}, $Net::Whois::Raw::CHECK_EXCEED);
-			local $stash = $stash_ref;
 			push @{$stash->{results}{www_whois_query}}, $resp;
 			$stash->{calls}{www_whois_query} = 0;
 			$stash->{caller}->(@{$stash->{args}});
@@ -275,7 +275,12 @@ sub www_whois_query_ae_request {
 	
 	my $headers = {Referer => $referer};
 	my @params;
-	push @params, on_prepare => sub { local $stash = $stash_ref; &_sock_prepare_cb };
+	push @params, on_prepare => sub { 
+		my $fh = shift;
+		local $stash = $stash_ref;
+		_sock_prepare_cb($fh, $dom);
+	};
+	
 	if (exists $stash->{params}{timeout}) {
 		push @params, timeout => $stash->{params}{timeout};
 	}
