@@ -189,12 +189,12 @@ sub whois_query_ae {
 	}, sub {
 		my $fh = shift;
 		local $stash = $stash_ref;
-		_sock_prepare_cb($fh, $dom);
+		_sock_prepare_cb($fh, $srv);
 	};
 }
 
 sub _sock_prepare_cb {
-	my ($fh, $dom) = @_;
+	my ($fh, $srv) = @_;
 	
 	my $sockname = getsockname($fh);
 	my $timeout = $Net::Whois::Raw::TIMEOUT||30;
@@ -203,8 +203,7 @@ sub _sock_prepare_cb {
 		$timeout = $stash->{params}{on_prepare}->($fh);
 	}
 	
-	my $server4query = Net::Whois::Raw::Common::get_server($dom);
-	my $rotate_reference = eval { Net::Whois::Raw::get_ips_for_query($server4query) };
+	my $rotate_reference = eval { Net::Whois::Raw::get_ips_for_query($srv) };
 	
 	if (!$rotate_reference && @Net::Whois::Raw::SRC_IPS && $sockname eq getsockname($fh)) {
 		# we have ip and there was no bind request in on_prepare callback
@@ -278,7 +277,7 @@ sub www_whois_query_ae_request {
 	push @params, on_prepare => sub { 
 		my $fh = shift;
 		local $stash = $stash_ref;
-		_sock_prepare_cb($fh, $dom);
+		_sock_prepare_cb($fh, 'www_whois');
 	};
 	
 	if (exists $stash->{params}{timeout}) {
