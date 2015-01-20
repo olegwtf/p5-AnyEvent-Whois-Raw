@@ -173,7 +173,7 @@ sub whois_query_ae {
 			on_error => sub {
 				undef $timer;
 				$handle->destroy();
-				$stash_ref->{args}->[-1]->('', "Read error form $srv: $!");
+				$stash_ref->{args}->[-1]->('', "Read error from $srv: $!");
 			},
 			on_eof => sub {
 				undef $timer;
