@@ -4,6 +4,7 @@ AnyEvent-Whois-Raw
 This module provides non-blocking AnyEvent compatible wrapper for Net::Whois::Raw.
 It is not trivial to make non-blocking module from blocking one without full rewrite.
 This wrapper makes such attempt. To decide how ugly or beautiful this attempt implemented
+see source code of the module
 
 INSTALLATION
 
